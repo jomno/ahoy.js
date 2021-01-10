@@ -10,7 +10,8 @@ let config = {
   useBeacon: true,
   startOnReady: true,
   trackVisits: true,
-  cookies: true,
+  cookies: false,
+  localstorage: true,
   cookieDomain: null,
   headers: {},
   visitParams: {},
@@ -70,8 +71,14 @@ function destroyCookie(name) {
 }
 
 function log(message) {
-  if (getCookie("ahoy_debug")) {
-    window.console.log(message);
+  if (config.localstorage) {
+    if (localStorage.getItem("ahoy_debug")) {
+      window.console.log(message);
+    }
+  } else if (config.cookies) {
+    if (getCookie("ahoy_debug")) {
+      window.console.log(message);
+    }
   }
 }
 
@@ -139,7 +146,9 @@ function generateId() {
 }
 
 function saveEventQueue() {
-  if (config.cookies && canStringify) {
+  if (config.localstorage) {
+    localStorage.setItem("ahoy_events", JSON.stringify(eventQueue));
+  } else if (config.cookies && canStringify) {
     setCookie("ahoy_events", JSON.stringify(eventQueue), 1);
   }
 }
@@ -283,9 +292,13 @@ function createVisit() {
 
   visitId = ahoy.getVisitId();
   visitorId = ahoy.getVisitorId();
-  track = getCookie("ahoy_track");
+  if (config.localstorage) {
+    track = localStorage.getItem("ahoy_track");
+  } else if (config.cookies) {
+    track = getCookie("ahoy_track");
+  }
 
-  if (config.cookies === false || config.trackVisits === false) {
+  if ((config.cookies === false && config.localstorage === false) || config.trackVisits === false) {
     log("Visit tracking disabled");
     setReady();
   } else if (visitId && visitorId && !track) {
@@ -295,7 +308,11 @@ function createVisit() {
   } else {
     if (!visitId) {
       visitId = generateId();
-      setCookie("ahoy_visit", visitId, config.visitDuration);
+      if (config.localstorage) {
+        localStorage.setItem("ahoy_visit", visitId);
+      } else if (config.cookies) {
+        setCookie("ahoy_visit", visitId, config.visitDuration);
+      }
     }
 
     // make sure cookies are enabled
@@ -304,7 +321,11 @@ function createVisit() {
 
       if (!visitorId) {
         visitorId = generateId();
-        setCookie("ahoy_visitor", visitorId, config.visitorDuration);
+        if (config.localstorage) {
+          localStorage.setItem("ahoy_visitor", visitorId);
+        } else if (config.cookies) {
+          setCookie("ahoy_visitor", visitorId, config.visitorDuration);
+        }
       }
 
       let data = {
@@ -333,6 +354,7 @@ function createVisit() {
       sendRequest(visitsUrl(), data, function () {
         // wait until successful to destroy
         destroyCookie("ahoy_track");
+        localStorage.removeItem("ahoy_track"); 
         setReady();
       });
     } else {
@@ -343,11 +365,19 @@ function createVisit() {
 }
 
 ahoy.getVisitId = ahoy.getVisitToken = function () {
-  return getCookie("ahoy_visit");
+  if (config.localstorage) {
+    return localStorage.getItem("ahoy_visit");
+  } else if (config.cookies) {
+    return getCookie("ahoy_visit");
+  }
 };
 
 ahoy.getVisitorId = ahoy.getVisitorToken = function () {
-  return getCookie("ahoy_visitor");
+  if (config.localstorage) {
+    return localStorage.getItem("ahoy_visitor");
+  } else if (config.cookies) {
+    return getCookie("ahoy_visitor");
+  }
 };
 
 ahoy.reset = function () {
@@ -355,13 +385,19 @@ ahoy.reset = function () {
   destroyCookie("ahoy_visitor");
   destroyCookie("ahoy_events");
   destroyCookie("ahoy_track");
+  localStorage.removeItem("ahoy_visit");
+  localStorage.removeItem("ahoy_visitor");
+  localStorage.removeItem("ahoy_events");
+  localStorage.removeItem("ahoy_track");
   return true;
 };
 
 ahoy.debug = function (enabled) {
   if (enabled === false) {
     destroyCookie("ahoy_debug");
+    localStorage.removeItem("ahoy_debug");
   } else {
+    localStorage.setItem("ahoy_debug", "t")
     setCookie("ahoy_debug", "t", 365 * 24 * 60); // 1 year
   }
   return true;
@@ -454,7 +490,11 @@ ahoy.trackAll = function() {
 
 // push events from queue
 try {
-  eventQueue = JSON.parse(getCookie("ahoy_events") || "[]");
+  if (config.localstorage) {
+    eventQueue = JSON.parse(localStorage.getItem("ahoy_events") || "[]");
+  } else if (config.cookies) {
+    eventQueue = JSON.parse(getCookie("ahoy_events") || "[]");
+  }
 } catch (e) {
   // do nothing
 }
